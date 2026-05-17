@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../providers/auth_provider.dart';
 import '../../models/user_model.dart';
 import '../../config/theme.dart';
 import '../../config/app_keys.dart';
+import '../../services/otp_service.dart';
 import 'loading_auth_screen.dart';
+import 'otp_verification_screen.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -69,7 +70,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
     return lower.endsWith('@cfd.nu.edu.pk');
   }
 
-  Future<void> _signUp() async {
+  Future<void> _sendOtp() async {
     if (!_formKey.currentState!.validate()) return;
 
     final email = _emailController.text.trim();
@@ -97,63 +98,56 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
 
     setState(() => _isLoading = true);
 
+    // Show sending indicator
     if (mounted) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => const LoadingAuthScreen(message: 'Creating account...'),
+          builder: (context) => const LoadingAuthScreen(message: 'Sending verification code...'),
           fullscreenDialog: true,
         ),
       );
     }
 
     try {
-      debugPrint('Attempting sign up for $email');
-      final authNotifier = ref.read(currentUserProvider.notifier);
-      await authNotifier.signUp(
+      final otp = OtpService.generateOtp();
+      await OtpService.sendOtpEmail(
         email: email,
-        password: _passwordController.text,
-        name: _nameController.text.trim(),
-        fathersName: _fathersNameController.text.trim(),
-        arnRollNumber: _arnRollController.text.trim().toUpperCase(),
-        phone: _phoneController.text.trim(),
-        gender: _selectedGender,
-        agreeToTerms: _agreeToTerms,
+        otp: otp,
+        recipientName: _nameController.text.trim(),
       );
 
-      if (mounted) {
-        context.go('/auth/awaiting-verification');
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-        messenger?.showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully!'),
-            backgroundColor: AppTheme.successColor,
-          ),
-        );
-      }
-    } catch (e, st) {
-      debugPrint('Sign up failed: $e\n$st');
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close loading screen
+
+      // Navigate to OTP verification screen with all form data
+      context.push(
+        '/auth/verify-otp',
+        extra: OtpSignupData(
+          email: email,
+          password: _passwordController.text,
+          name: _nameController.text.trim(),
+          fathersName: _fathersNameController.text.trim(),
+          arnRollNumber: _arnRollController.text.trim().toUpperCase(),
+          phone: _phoneController.text.trim(),
+          gender: _selectedGender,
+          agreeToTerms: _agreeToTerms,
+          otp: otp,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Send OTP failed: $e');
       if (mounted) Navigator.of(context).pop();
-      if (mounted) {
-        String errorMessage = e.toString().replaceFirst('Exception: ', '');
-        if (errorMessage.contains('email-already-in-use')) {
-          errorMessage = 'An account with this email already exists. Please sign in instead.';
-        } else if (errorMessage.contains('weak-password')) {
-          errorMessage = 'Password is too weak. Please use a stronger password.';
-        } else if (errorMessage.contains('invalid-email')) {
-          errorMessage = 'Invalid email address. Please check your email format.';
-        } else if (errorMessage.contains('network')) {
-          errorMessage = 'Network error. Please check your internet connection and try again.';
-        }
-        messenger?.showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: AppTheme.errorColor,
-            duration: const Duration(seconds: 5),
-          ),
-        );
+      String errorMessage = e.toString().replaceFirst('Exception: ', '');
+      if (errorMessage.contains('network') || errorMessage.contains('Network')) {
+        errorMessage = 'Network error. Please check your internet connection and try again.';
       }
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: AppTheme.errorColor,
+          duration: const Duration(seconds: 5),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -518,7 +512,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
 
                             // Gradient button
                             GestureDetector(
-                              onTap: _isLoading ? null : _signUp,
+                              onTap: _isLoading ? null : _sendOtp,
                               child: Container(
                                 height: 54,
                                 decoration: BoxDecoration(
@@ -549,7 +543,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
                                         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                                       )
                                     : const Text(
-                                        'Create Account',
+                                        'Send Verification Code',
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 16,

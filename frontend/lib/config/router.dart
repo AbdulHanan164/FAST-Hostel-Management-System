@@ -10,6 +10,7 @@ import '../screens/auth/login_screen.dart';
 import '../screens/auth/signup_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/awaiting_verification_screen.dart';
+import '../screens/auth/otp_verification_screen.dart';
 import '../screens/student/student_dashboard.dart';
 import '../screens/student/hostel_allotment/hostel_application_screen.dart';
 import '../screens/student/hostel_allotment/room_selection_screen.dart';
@@ -164,6 +165,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/auth/awaiting-verification',
         builder: (context, state) => const AwaitingVerificationScreen(),
+      ),
+      GoRoute(
+        path: '/auth/verify-otp',
+        builder: (context, state) {
+          final data = state.extra as OtpSignupData;
+          return OtpVerificationScreen(data: data);
+        },
       ),
 
       // Student Routes
