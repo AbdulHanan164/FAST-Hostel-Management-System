@@ -2,12 +2,13 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import '../config/web_config.dart';
 
-/// Handles OTP generation and email delivery via EmailJS.
+/// Handles OTP generation and email delivery via the FAST Hostel Email API
+/// (Flask + Gmail SMTP running on localhost:8000).
 class OtpService {
-  static const String _emailJsUrl =
-      'https://api.emailjs.com/api/v1.0/email/send';
+  /// Base URL of the Flask email API.
+  /// Change this to your deployed server URL in production.
+  static const String _apiBaseUrl = 'http://localhost:8000';
 
   /// Generates a cryptographically random 6-digit OTP string.
   static String generateOtp() {
@@ -16,66 +17,57 @@ class OtpService {
     return code.toString();
   }
 
-  /// Sends [otp] to [email] via EmailJS.
+  /// Sends [otp] to [email] via the Flask SMTP backend.
   ///
-  /// Returns `true` on success, throws an exception with a human-readable
-  /// message on failure so the UI can show a proper error.
+  /// Returns `true` on success.
+  /// Throws an [Exception] with a human-readable message on failure.
   static Future<bool> sendOtpEmail({
     required String email,
     required String otp,
     required String recipientName,
   }) async {
     try {
-      const serviceId = WebConfig.emailJsServiceId;
-      const templateId = WebConfig.emailJsTemplateId;
-      const publicKey = WebConfig.emailJsPublicKey;
-
-      // Warn in debug mode if credentials are still placeholders
-      if (serviceId.startsWith('YOUR_') ||
-          templateId.startsWith('YOUR_') ||
-          publicKey.startsWith('YOUR_')) {
-        debugPrint(
-          '[OtpService] ⚠ EmailJS credentials not configured in WebConfig. '
-          'OTP will only be printed to console for testing.',
-        );
-        debugPrint('[OtpService] TEST OTP for $email → $otp');
-        // Return true so the UI flow still works during development
-        return true;
-      }
+      debugPrint('[OtpService] Sending OTP to $email via $_apiBaseUrl/send-otp');
 
       final response = await http
           .post(
-            Uri.parse(_emailJsUrl),
+            Uri.parse('$_apiBaseUrl/send-otp'),
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode({
-              'service_id': serviceId,
-              'template_id': templateId,
-              'user_id': publicKey,
-              'template_params': {
-                'to_email': email,
-                'to_name': recipientName,
-                'otp_code': otp,
-                'app_name': 'FAST Hostel System',
-              },
+              'to_email': email,
+              'to_name': recipientName,
+              'otp_code': otp,
             }),
           )
           .timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        debugPrint('[OtpService] OTP email sent successfully to $email');
-        return true;
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        if (body['success'] == true) {
+          debugPrint('[OtpService] OTP sent successfully to $email');
+          return true;
+        }
+        throw Exception(body['message'] ?? 'Failed to send OTP.');
       } else {
-        debugPrint(
-          '[OtpService] EmailJS error ${response.statusCode}: ${response.body}',
-        );
-        throw Exception(
-          'Failed to send OTP email (status ${response.statusCode}). '
-          'Please try again.',
-        );
+        // Try to parse error message from response body
+        String errorMsg = 'Failed to send OTP (status ${response.statusCode}).';
+        try {
+          final body = jsonDecode(response.body) as Map<String, dynamic>;
+          errorMsg = body['message'] ?? errorMsg;
+        } catch (_) {}
+        debugPrint('[OtpService] Error: $errorMsg');
+        throw Exception(errorMsg);
       }
+    } on http.ClientException catch (e) {
+      throw Exception(
+        'Cannot connect to email server. '
+        'Make sure the backend is running (backend/email_api/start.bat). '
+        'Details: ${e.message}',
+      );
+    } on Exception {
+      rethrow;
     } catch (e) {
-      if (e is Exception) rethrow;
-      throw Exception('Network error while sending OTP. Check your connection.');
+      throw Exception('Unexpected error sending OTP: $e');
     }
   }
 }
