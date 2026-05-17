@@ -39,6 +39,8 @@ import '../screens/admin/notice_board_management_screen.dart';
 import '../screens/admin/clear_data_screen.dart';
 import '../screens/admin/student_status_screen.dart';
 import '../screens/notice_board_screen.dart';
+import '../screens/chat/chat_list_screen.dart';
+import '../screens/chat/chat_room_screen.dart';
 import '../utils/admin_utils.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -216,6 +218,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'browse-hostels',
             builder: (context, state) => const HostelBrowseScreen(),
+          ),
+          GoRoute(
+            path: 'chat',
+            builder: (context, state) => const ChatListScreen(),
+          ),
+          GoRoute(
+            path: 'chat/:chatId',
+            builder: (context, state) {
+              final room = state.extra as dynamic;
+              return ChatRoomScreen(room: room);
+            },
           ),
         ],
       ),

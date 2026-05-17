@@ -639,6 +639,7 @@ class _MainModulesGrid extends ConsumerWidget {
           const _ModuleItem(title: 'Room\nSwap', emoji: '🔄', icon: Icons.swap_horiz_rounded, color: Color(0xFF0891B2), route: '/student/dashboard/room-swap'),
           const _ModuleItem(title: 'Browse\nHostels', emoji: '🔍', icon: Icons.search_rounded, color: Color(0xFF7C3AED), route: '/student/dashboard/browse-hostels'),
           const _ModuleItem(title: 'My\nProfile', emoji: '👤', icon: Icons.person, color: AppColors.info, route: '/student/dashboard/profile'),
+          const _ModuleItem(title: 'Messages', emoji: '💬', icon: Icons.chat_bubble_outline, color: Color(0xFF0F766E), route: '/student/dashboard/chat'),
         ]);
       },
     );
