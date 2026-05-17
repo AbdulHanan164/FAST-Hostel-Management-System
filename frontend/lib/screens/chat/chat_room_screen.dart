@@ -1,4 +1,3 @@
-import '../../platform_io.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -73,11 +72,13 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
       try {
         final userId = ref.read(currentUserProvider).value?.uid;
         if (userId != null) {
+          final bytes = await image.readAsBytes();
           await ref.read(chatServiceProvider).sendMessage(
                 roomId: widget.room.id,
                 senderId: userId,
                 content: '📷 Photo',
-                image: File(image.path),
+                imageBytes: bytes,
+                imageMimeType: 'image/jpeg',
               );
         }
       } catch (e) {
