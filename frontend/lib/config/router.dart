@@ -11,6 +11,8 @@ import '../screens/auth/signup_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/awaiting_verification_screen.dart';
 import '../screens/auth/otp_verification_screen.dart';
+import '../screens/auth/forgot_password_otp_screen.dart';
+import '../screens/auth/reset_password_screen.dart';
 import '../screens/student/student_dashboard.dart';
 import '../screens/student/hostel_allotment/hostel_application_screen.dart';
 import '../screens/student/hostel_allotment/room_selection_screen.dart';
@@ -171,6 +173,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final data = state.extra as OtpSignupData;
           return OtpVerificationScreen(data: data);
+        },
+      ),
+      GoRoute(
+        path: '/auth/forgot-password-otp',
+        builder: (context, state) {
+          final data = state.extra as ForgotPasswordOtpData;
+          return ForgotPasswordOtpScreen(data: data);
+        },
+      ),
+      GoRoute(
+        path: '/auth/reset-password',
+        builder: (context, state) {
+          final email = state.extra as String;
+          return ResetPasswordScreen(email: email);
         },
       ),
 

@@ -1,29 +1,28 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../config/theme.dart';
 import '../../config/app_keys.dart';
-import '../../services/otp_service.dart';
 import 'loading_auth_screen.dart';
-import 'forgot_password_otp_screen.dart';
 
-class ForgotPasswordScreen extends ConsumerStatefulWidget {
-  const ForgotPasswordScreen({super.key});
+class ResetPasswordScreen extends StatefulWidget {
+  final String email;
+  const ResetPasswordScreen({super.key, required this.email});
 
   @override
-  ConsumerState<ForgotPasswordScreen> createState() =>
-      _ForgotPasswordScreenState();
+  State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
 }
 
-class _ForgotPasswordScreenState
-    extends ConsumerState<ForgotPasswordScreen>
+class _ResetPasswordScreenState extends State<ResetPasswordScreen>
     with SingleTickerProviderStateMixin {
-  final _formKey   = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
-  bool _isLoading  = false;
+  final _formKey      = GlobalKey<FormState>();
+  final _passCtrl     = TextEditingController();
+  final _confirmCtrl  = TextEditingController();
+  bool _isLoading     = false;
+  bool _obscurePass   = true;
+  bool _obscureConfirm = true;
 
   late AnimationController _animController;
   late Animation<double>   _fadeAnim;
@@ -33,55 +32,43 @@ class _ForgotPasswordScreenState
   void initState() {
     super.initState();
     _animController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 450),
+      vsync: this, duration: const Duration(milliseconds: 450),
     );
     _fadeAnim  = CurvedAnimation(parent: _animController, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.08),
-      end:   Offset.zero,
+      begin: const Offset(0, 0.08), end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
     _animController.forward();
   }
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    _confirmCtrl.dispose();
     _animController.dispose();
     super.dispose();
   }
 
-  bool _isValidEmail(String email) {
-    final lower = email.toLowerCase();
-    return lower.endsWith('@cfd.nu.edu.pk') ||
-        lower == 'fasthostel3@gmail.com';
-  }
-
-  Future<void> _sendOtp() async {
+  Future<void> _resetPassword() async {
     if (!_formKey.currentState!.validate()) return;
-    final email    = _emailCtrl.text.trim();
     final messenger = AppKeys.scaffoldMessengerKey.currentState;
 
     setState(() => _isLoading = true);
     if (mounted) {
       Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => const LoadingAuthScreen(message: 'Checking account...'),
+        builder: (_) =>
+            const LoadingAuthScreen(message: 'Updating password...'),
         fullscreenDialog: true,
       ));
     }
 
     try {
-      // 1. Generate OTP
-      final otp = OtpService.generateOtp();
-
-      // 2. Ask backend to verify account exists AND send email
       final response = await http.post(
-        Uri.parse('http://localhost:8000/check-email'),
+        Uri.parse('http://localhost:8000/reset-password'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'email':    email,
-          'otp_code': otp,
-          'to_name':  'Student',
+          'email':        widget.email,
+          'new_password': _passCtrl.text,
         }),
       ).timeout(const Duration(seconds: 15));
 
@@ -91,22 +78,30 @@ class _ForgotPasswordScreenState
       Navigator.of(context).pop(); // dismiss loading
 
       if (response.statusCode == 200 && body['success'] == true) {
-        // Navigate to OTP screen
-        context.push('/auth/forgot-password-otp',
-            extra: ForgotPasswordOtpData(email: email, otp: otp));
+        messenger?.showSnackBar(const SnackBar(
+          content: Text(
+            'Password updated successfully! Please sign in with your new password.',
+          ),
+          backgroundColor: AppTheme.successColor,
+          duration: Duration(seconds: 4),
+        ));
+        // Clear entire navigation stack and go to login
+        context.go('/auth/login');
       } else {
         messenger?.showSnackBar(SnackBar(
-          content: Text(body['message']?.toString() ??
-              'Failed to send reset code. Try again.'),
+          content: Text(
+            body['message']?.toString() ??
+                'Failed to update password. Please try again.',
+          ),
           backgroundColor: AppTheme.errorColor,
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 5),
         ));
       }
     } on http.ClientException {
       if (mounted) Navigator.of(context).pop();
       messenger?.showSnackBar(const SnackBar(
         content: Text(
-          'Cannot connect to email server. '
+          'Cannot connect to server. '
           'Make sure the backend is running (backend/email_api/start.bat).',
         ),
         backgroundColor: AppTheme.errorColor,
@@ -131,8 +126,7 @@ class _ForgotPasswordScreenState
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [AppColors.primaryDark, AppColors.primary, AppColors.primaryLight],
-            begin: Alignment.topLeft,
-            end:   Alignment.bottomRight,
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
           ),
         ),
         child: SafeArea(
@@ -148,16 +142,8 @@ class _ForgotPasswordScreenState
                   Widget content = Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Back button
-                      Row(children: [
-                        IconButton(
-                          onPressed: () => context.pop(),
-                          icon: const Icon(Icons.arrow_back_ios,
-                              color: Colors.white, size: 20),
-                        ),
-                        const Spacer(),
-                      ]),
-                      const SizedBox(height: 8),
+                      // No back button — this is a one-way screen after OTP
+                      const SizedBox(height: 16),
 
                       // Icon
                       Container(
@@ -166,13 +152,13 @@ class _ForgotPasswordScreenState
                           color: Colors.white.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.lock_reset_outlined,
+                        child: const Icon(Icons.lock_outline,
                             size: 40, color: Colors.white),
                       ),
                       const SizedBox(height: 20),
 
                       const Text(
-                        'Reset Password',
+                        'Set New Password',
                         style: TextStyle(
                           color: Colors.white, fontSize: 24,
                           fontWeight: FontWeight.w800,
@@ -180,11 +166,10 @@ class _ForgotPasswordScreenState
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Enter your university email to receive a reset code',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.80),
-                          fontSize: 14,
+                        widget.email,
+                        style: const TextStyle(
+                          color: AppColors.accent, fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 28),
@@ -209,7 +194,7 @@ class _ForgotPasswordScreenState
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               const Text(
-                                'Forgot your password?',
+                                'Create a new password',
                                 style: TextStyle(
                                   fontSize: 20, fontWeight: FontWeight.w800,
                                   color: AppColors.textPrimary,
@@ -217,63 +202,108 @@ class _ForgotPasswordScreenState
                               ),
                               const SizedBox(height: 6),
                               const Text(
-                                'We\'ll verify your account and send a 6-digit code to your email.',
+                                'Your new password must be at least 8 characters and include uppercase, lowercase, and a number.',
                                 style: TextStyle(
                                   fontSize: 13, color: AppColors.textSecondary,
                                 ),
                               ),
                               const SizedBox(height: 24),
 
+                              // New password
                               TextFormField(
-                                controller: _emailCtrl,
-                                keyboardType: TextInputType.emailAddress,
-                                decoration: const InputDecoration(
-                                  labelText: 'University Email',
-                                  hintText: 'student@cfd.nu.edu.pk',
-                                  prefixIcon: Icon(Icons.email_outlined),
+                                controller: _passCtrl,
+                                obscureText: _obscurePass,
+                                decoration: InputDecoration(
+                                  labelText: 'New Password',
+                                  prefixIcon: const Icon(Icons.lock_outline),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePass
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                    onPressed: () => setState(
+                                        () => _obscurePass = !_obscurePass),
+                                  ),
                                 ),
                                 validator: (v) {
                                   if (v == null || v.isEmpty) {
-                                    return 'Please enter your email';
+                                    return 'Please enter a new password';
                                   }
-                                  if (!_isValidEmail(v.trim())) {
-                                    return 'Use your @cfd.nu.edu.pk university email';
+                                  if (v.length < 8) {
+                                    return 'Password must be at least 8 characters';
+                                  }
+                                  if (!v.contains(RegExp(r'[A-Z]'))) {
+                                    return 'Must contain at least one uppercase letter';
+                                  }
+                                  if (!v.contains(RegExp(r'[a-z]'))) {
+                                    return 'Must contain at least one lowercase letter';
+                                  }
+                                  if (!v.contains(RegExp(r'[0-9]'))) {
+                                    return 'Must contain at least one number';
                                   }
                                   return null;
                                 },
                               ),
-                              const SizedBox(height: 6),
-                              const Padding(
-                                padding: EdgeInsets.only(left: 12),
-                                child: Text(
-                                  'We\'ll check if an account exists before sending the code.',
-                                  style: TextStyle(
-                                    fontSize: 12, color: AppColors.textSecondary,
+                              const SizedBox(height: 16),
+
+                              // Confirm password
+                              TextFormField(
+                                controller: _confirmCtrl,
+                                obscureText: _obscureConfirm,
+                                decoration: InputDecoration(
+                                  labelText: 'Confirm New Password',
+                                  prefixIcon: const Icon(Icons.lock_outline),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscureConfirm
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                    onPressed: () => setState(() =>
+                                        _obscureConfirm = !_obscureConfirm),
                                   ),
                                 ),
+                                validator: (v) {
+                                  if (v == null || v.isEmpty) {
+                                    return 'Please confirm your password';
+                                  }
+                                  if (v != _passCtrl.text) {
+                                    return 'Passwords do not match';
+                                  }
+                                  return null;
+                                },
                               ),
+                              const SizedBox(height: 28),
 
-                              const SizedBox(height: 26),
-
-                              // Send button
+                              // Update button
                               GestureDetector(
-                                onTap: _isLoading ? null : _sendOtp,
+                                onTap: _isLoading ? null : _resetPassword,
                                 child: Container(
                                   height: 52,
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: _isLoading
                                           ? [
-                                              AppColors.primary.withValues(alpha: 0.5),
-                                              AppColors.primaryLight.withValues(alpha: 0.5),
+                                              AppColors.primary
+                                                  .withValues(alpha: 0.5),
+                                              AppColors.primaryLight
+                                                  .withValues(alpha: 0.5),
                                             ]
-                                          : const [AppColors.primary, AppColors.primaryLight],
+                                          : const [
+                                              AppColors.primary,
+                                              AppColors.primaryLight,
+                                            ],
                                     ),
                                     borderRadius: BorderRadius.circular(12),
                                     boxShadow: _isLoading ? null : [
                                       BoxShadow(
-                                        color: AppColors.primary.withValues(alpha: 0.3),
-                                        blurRadius: 12, offset: const Offset(0, 4),
+                                        color: AppColors.primary
+                                            .withValues(alpha: 0.3),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4),
                                       ),
                                     ],
                                   ),
@@ -282,11 +312,12 @@ class _ForgotPasswordScreenState
                                       ? const SizedBox(
                                           width: 22, height: 22,
                                           child: CircularProgressIndicator(
-                                            color: Colors.white, strokeWidth: 2.5,
+                                            color: Colors.white,
+                                            strokeWidth: 2.5,
                                           ),
                                         )
                                       : const Text(
-                                          'Send Reset Code',
+                                          'Update Password',
                                           style: TextStyle(
                                             color: Colors.white, fontSize: 16,
                                             fontWeight: FontWeight.w700,
@@ -297,9 +328,8 @@ class _ForgotPasswordScreenState
 
                               const SizedBox(height: 18),
 
-                              // Back to login
                               GestureDetector(
-                                onTap: () => context.pop(),
+                                onTap: () => context.go('/auth/login'),
                                 child: const Center(
                                   child: Text(
                                     'Back to Sign In',
